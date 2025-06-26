@@ -1,0 +1,79 @@
+name: 예스파일 자동 출석체크
+
+# 워크플로우 실행 조건
+on:
+  # 매일 한국시간 00:30에 자동 실행 (UTC 15:30)
+  schedule:
+    - cron: '30 15 * * *'
+  
+  # 수동 실행 가능
+  workflow_dispatch:
+  
+  # 코드 Push 시에도 테스트 실행 (선택사항)
+  push:
+    branches: [ main, master ]
+
+jobs:
+  attendance-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 1. 리포지토리 체크아웃
+    - name: 코드 체크아웃
+      uses: actions/checkout@v4
+    
+    # 2. Python 환경 설정
+    - name: Python 환경 설정
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    # 3. 시스템 패키지 업데이트 및 Chrome 설치
+    - name: Chrome 브라우저 설치
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          google-chrome-stable \
+          xvfb \
+          unzip \
+          wget
+    
+    # 4. Python 의존성 설치
+    - name: Python 패키지 설치
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    # 5. Chrome 및 시스템 정보 확인
+    - name: 브라우저 정보 확인
+      run: |
+        google-chrome --version
+        python --version
+        pip list | grep selenium
+        pip list | grep webdriver-manager
+    
+    # 6. 가상 디스플레이 환경에서 자동화 실행
+    - name: 예스파일 출석체크 실행
+      env:
+        YESFILE_USERNAME: ${{ secrets.YESFILE_USERNAME }}
+        YESFILE_PASSWORD: ${{ secrets.YESFILE_PASSWORD }}
+        DISPLAY: :99
+      run: |
+        # 가상 디스플레이 시작
+        Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+        sleep 3
+        
+        # Python 스크립트 실행
+        python yesfile_attendance_improved.py
+    
+    # 7. 실행 결과 업로드 (선택사항)
+    - name: 로그 파일 업로드
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: attendance-logs
+        path: |
+          *.log
+          *.txt
+        retention-days: 7
