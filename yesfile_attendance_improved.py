@@ -1,10 +1,11 @@
-# yesfile_attendance_improved.py
+# yesfile_attendance_final.py (최종 수정 버전)
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, WebDriverException
 from webdriver_manager.chrome import ChromeDriverManager
 import time
@@ -25,7 +26,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def setup_driver():
-    """크롬 드라이버 설정 (GitHub Actions 최적화)"""
+    """크롬 드라이버 설정 (JavaScript 활성화)"""
     chrome_options = Options()
     
     # GitHub Actions 환경 감지
@@ -36,9 +37,8 @@ def setup_driver():
         chrome_options.add_argument("--headless")
     else:
         logger.info("로컬 환경 감지됨 - 브라우저 표시 모드")
-        # 로컬 테스트 시에는 headless 모드 비활성화
         
-    # 기본 Chrome 옵션
+    # 기본 Chrome 옵션 (JavaScript 활성화)
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
@@ -53,25 +53,24 @@ def setup_driver():
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    # 추가 안정성 옵션
+    # 추가 안정성 옵션 (JavaScript는 활성화 상태 유지)
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-plugins")
-    chrome_options.add_argument("--disable-images")  # 이미지 로딩 비활성화로 속도 향상
-    chrome_options.add_argument("--disable-javascript")  # 필요시 제거
+    chrome_options.add_argument("--disable-images")  # 속도 향상
+    # --disable-javascript 옵션 제거됨 (이것이 핵심!)
     
     try:
-        # 자동으로 적합한 크롬드라이버 다운로드 및 설정
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
         # 봇 탐지 우회 JavaScript 실행
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
-        # 타임아웃 설정 (더 긴 대기 시간)
-        driver.implicitly_wait(15)
-        driver.set_page_load_timeout(30)
+        # 타임아웃 설정
+        driver.implicitly_wait(20)  # 더 긴 대기 시간
+        driver.set_page_load_timeout(40)
         
-        logger.info("크롬 드라이버 설정 완료")
+        logger.info("크롬 드라이버 설정 완료 (JavaScript 활성화)")
         return driver
         
     except Exception as e:
@@ -79,8 +78,8 @@ def setup_driver():
         logger.error(f"상세 오류: {traceback.format_exc()}")
         return None
 
-def safe_find_element(driver, by, value, timeout=15):
-    """안전한 요소 찾기 (강화된 대기 조건)"""
+def safe_find_element(driver, by, value, timeout=20):
+    """안전한 요소 찾기 (더 긴 대기 시간)"""
     try:
         logger.debug(f"요소 찾기 시도: {by}='{value}'")
         
@@ -89,12 +88,12 @@ def safe_find_element(driver, by, value, timeout=15):
             EC.element_to_be_clickable((by, value))
         )
         
-        # 추가 안정성을 위한 대기
-        time.sleep(1)
+        # JavaScript 실행 완료 대기
+        time.sleep(2)
         
         # 요소가 화면에 보이도록 스크롤
         driver.execute_script("arguments[0].scrollIntoView(true);", element)
-        time.sleep(0.5)
+        time.sleep(1)
         
         logger.debug(f"요소 찾기 성공: {by}='{value}'")
         return element
@@ -123,18 +122,32 @@ def save_debug_info(driver, prefix="debug"):
         # 현재 URL 로깅
         logger.info(f"현재 URL: {driver.current_url}")
         
-        # 모든 input 요소 정보 수집
+        # JavaScript 로드 확인
         try:
+            js_enabled = driver.execute_script("return typeof jQuery !== 'undefined' || document.readyState === 'complete';")
+            logger.info(f"JavaScript 실행 상태: {js_enabled}")
+        except:
+            logger.warning("JavaScript 실행 상태를 확인할 수 없습니다.")
+        
+        # 모든 버튼과 폼 요소 정보 수집
+        try:
+            buttons = driver.find_elements(By.TAG_NAME, "button")
             inputs = driver.find_elements(By.TAG_NAME, "input")
-            logger.info(f"페이지의 input 요소 개수: {len(inputs)}")
-            for i, inp in enumerate(inputs[:10]):  # 처음 10개만 로깅
-                name_attr = inp.get_attribute('name')
-                type_attr = inp.get_attribute('type')
-                id_attr = inp.get_attribute('id')
-                class_attr = inp.get_attribute('class')
-                logger.debug(f"Input {i}: name='{name_attr}', type='{type_attr}', id='{id_attr}', class='{class_attr}'")
+            forms = driver.find_elements(By.TAG_NAME, "form")
+            
+            logger.info(f"페이지 요소 개수 - 버튼: {len(buttons)}, Input: {len(inputs)}, Form: {len(forms)}")
+            
+            # 각 버튼의 세부 정보
+            for i, btn in enumerate(buttons[:5]):  # 처음 5개만
+                text = btn.text.strip()
+                onclick = btn.get_attribute('onclick')
+                btn_type = btn.get_attribute('type')
+                btn_id = btn.get_attribute('id')
+                btn_class = btn.get_attribute('class')
+                logger.debug(f"Button {i}: text='{text}', type='{btn_type}', id='{btn_id}', class='{btn_class}', onclick='{onclick}'")
+                
         except Exception as e:
-            logger.warning(f"Input 요소 분석 실패: {e}")
+            logger.warning(f"요소 분석 실패: {e}")
             
     except Exception as e:
         logger.warning(f"디버깅 정보 저장 실패: {e}")
@@ -148,12 +161,10 @@ def get_login_credentials():
         logger.info("환경변수에서 로그인 정보를 가져왔습니다.")
         return username, password
 
-    # GitHub Actions 환경에서는 사용자 입력 불가
     if os.environ.get('GITHUB_ACTIONS') == 'true':
         logger.error("GitHub Actions 환경에서 환경변수가 설정되지 않았습니다.")
         return None, None
 
-    # 로컬 환경에서만 사용자 입력 받기
     logger.info("환경변수가 설정되지 않았습니다. 직접 입력해주세요.")
     try:
         username = input("예스파일 아이디: ").strip()
@@ -169,7 +180,7 @@ def get_login_credentials():
         return None, None
 
 def login_yesfile(driver, username, password):
-    """예스파일 로그인 (강화된 버전)"""
+    """예스파일 로그인 (폼 제출 방식 개선)"""
     try:
         logger.info("예스파일 로그인 시작")
         
@@ -178,32 +189,31 @@ def login_yesfile(driver, username, password):
         logger.info(f"로그인 페이지 접속: {login_url}")
         driver.get(login_url)
         
-        # 페이지 로딩 대기
-        time.sleep(5)
+        # 페이지 로딩 완료 대기 (JavaScript 실행 포함)
+        WebDriverWait(driver, 20).until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+        
+        # 추가 JavaScript 로딩 대기
+        time.sleep(7)
         
         # 디버깅 정보 저장
-        save_debug_info(driver, "login_page")
+        save_debug_info(driver, "login_page_with_js")
         
-        # 아이디 입력 필드 찾기 (더 많은 선택자 시도)
+        # 아이디 입력 필드 찾기
         username_selectors = [
             (By.NAME, "userid"),
             (By.ID, "userid"),
             (By.NAME, "username"),
             (By.ID, "username"),
-            (By.NAME, "user_id"),
-            (By.ID, "user_id"),
             (By.CSS_SELECTOR, "input[name='userid']"),
-            (By.CSS_SELECTOR, "input[id='userid']"),
             (By.CSS_SELECTOR, "input[type='text'][name*='user']"),
-            (By.CSS_SELECTOR, "input[type='text'][placeholder*='아이디']"),
-            (By.CSS_SELECTOR, "input[type='text'][placeholder*='ID']"),
-            (By.XPATH, "//input[@type='text' and contains(@placeholder, '아이디')]"),
             (By.XPATH, "//input[@type='text' and contains(@name, 'user')]")
         ]
 
         username_field = None
         for selector_type, selector_value in username_selectors:
-            username_field = safe_find_element(driver, selector_type, selector_value, timeout=10)
+            username_field = safe_find_element(driver, selector_type, selector_value, timeout=15)
             if username_field:
                 logger.info(f"아이디 입력 필드 찾음: {selector_type}='{selector_value}'")
                 break
@@ -216,35 +226,25 @@ def login_yesfile(driver, username, password):
         # 아이디 입력
         try:
             username_field.clear()
-            time.sleep(0.5)
+            time.sleep(1)
             username_field.send_keys(username)
             logger.info("아이디 입력 완료")
         except Exception as e:
             logger.error(f"아이디 입력 실패: {e}")
             return False
 
-        # 비밀번호 입력 필드 찾기 (더 강화된 대기 조건)
+        # 비밀번호 입력 필드 찾기
         password_selectors = [
             (By.NAME, "password"),
             (By.ID, "password"),
-            (By.NAME, "passwd"),
-            (By.ID, "passwd"),
-            (By.NAME, "pwd"),
-            (By.ID, "pwd"),
-            (By.CSS_SELECTOR, "input[name='password']"),
-            (By.CSS_SELECTOR, "input[id='password']"),
             (By.CSS_SELECTOR, "input[type='password']"),
-            (By.CSS_SELECTOR, "input[type='password'][name*='pass']"),
-            (By.XPATH, "//input[@type='password']"),
-            (By.XPATH, "//input[@type='password' and contains(@name, 'pass')]")
+            (By.CSS_SELECTOR, "input[name='password']"),
+            (By.XPATH, "//input[@type='password']")
         ]
 
-        # 비밀번호 필드 찾기 전 추가 대기
-        time.sleep(2)
-        
         password_field = None
         for selector_type, selector_value in password_selectors:
-            password_field = safe_find_element(driver, selector_type, selector_value, timeout=10)
+            password_field = safe_find_element(driver, selector_type, selector_value, timeout=15)
             if password_field:
                 logger.info(f"비밀번호 입력 필드 찾음: {selector_type}='{selector_value}'")
                 break
@@ -257,92 +257,99 @@ def login_yesfile(driver, username, password):
         # 비밀번호 입력
         try:
             password_field.clear()
-            time.sleep(0.5)
+            time.sleep(1)
             password_field.send_keys(password)
             logger.info("비밀번호 입력 완료")
         except Exception as e:
             logger.error(f"비밀번호 입력 실패: {e}")
             return False
 
-        # 로그인 버튼 찾기 및 클릭
-        login_selectors = [
-            (By.XPATH, "//input[@type='submit' and @value='로그인']"),
-            (By.XPATH, "//button[contains(text(), '로그인')]"),
-            (By.XPATH, "//input[@value='로그인']"),
-            (By.CSS_SELECTOR, "button[type='submit']"),
-            (By.CSS_SELECTOR, "input[type='submit']"),
-            (By.XPATH, "//form//input[@type='submit']"),
-            (By.XPATH, "//form//button[@type='submit']")
-        ]
-
-        login_button = None
-        for selector_type, selector_value in login_selectors:
-            login_button = safe_find_element(driver, selector_type, selector_value, timeout=5)
-            if login_button:
-                logger.info(f"로그인 버튼 찾음: {selector_type}='{selector_value}'")
-                break
-
-        if not login_button:
-            logger.error("로그인 버튼을 찾을 수 없습니다.")
-            save_debug_info(driver, "login_button_not_found")
-            return False
-
-        # 로그인 버튼 클릭
+        # === 새로운 로그인 제출 방식 (복수 시도) ===
+        login_success = False
+        
+        # 방법 1: Enter 키로 폼 제출
         try:
-            login_button.click()
-            logger.info("로그인 버튼 클릭 완료")
-        except Exception as e:
-            logger.error(f"로그인 버튼 클릭 실패: {e}")
-            return False
-
-        # 로그인 처리 대기
-        time.sleep(7)
-
-        # 로그인 결과 확인
-        save_debug_info(driver, "after_login")
-        
-        # 로그인 성공 확인 (다양한 방법으로 체크)
-        success_indicators = [
-            "마이페이지", "로그아웃", "내정보", "포인트", "구매자료",
-            "mypage", "logout", "point", "profile"
-        ]
-
-        current_url = driver.current_url.lower()
-        page_source = driver.page_source.lower()
-
-        # URL 변경 확인
-        if "login" not in current_url or "main" in current_url or "index" in current_url:
-            logger.info("URL 변경됨 - 로그인 성공 가능성 높음")
+            logger.info("Enter 키로 로그인 시도")
+            password_field.send_keys(Keys.RETURN)
+            time.sleep(5)
             
-            # 페이지 내용으로 재확인
-            for indicator in success_indicators:
-                if indicator.lower() in page_source:
-                    logger.info(f"로그인 성공 확인 - '{indicator}' 발견")
-                    return True
-            
-            # URL이 변경되었다면 일단 성공으로 처리
-            logger.info("URL 변경으로 로그인 성공으로 판단")
-            return True
-
-        # 현재 페이지에서 성공 지표 확인
-        for indicator in success_indicators:
-            if indicator.lower() in page_source:
-                logger.info(f"로그인 성공 - '{indicator}' 발견")
+            # 로그인 결과 확인
+            if check_login_success(driver):
+                logger.info("Enter 키 로그인 성공")
                 return True
+        except Exception as e:
+            logger.warning(f"Enter 키 로그인 실패: {e}")
 
-        # 로그인 실패 메시지 확인
-        error_indicators = [
-            "로그인 실패", "아이디를 확인", "비밀번호를 확인", "login failed",
-            "잘못된", "존재하지 않는", "invalid", "incorrect"
-        ]
-        
-        for error in error_indicators:
-            if error.lower() in page_source:
-                logger.error(f"로그인 실패 - '{error}' 오류 메시지 발견")
-                return False
+        # 방법 2: 폼을 직접 찾아서 제출
+        try:
+            logger.info("폼 직접 제출 시도")
+            form_element = driver.find_element(By.TAG_NAME, "form")
+            if form_element:
+                driver.execute_script("arguments[0].submit();", form_element)
+                time.sleep(5)
+                
+                if check_login_success(driver):
+                    logger.info("폼 직접 제출 로그인 성공")
+                    return True
+        except Exception as e:
+            logger.warning(f"폼 직접 제출 실패: {e}")
 
-        logger.warning("로그인 결과를 명확히 판단할 수 없습니다.")
-        logger.info(f"현재 URL: {current_url}")
+        # 방법 3: JavaScript로 로그인 함수 직접 호출
+        try:
+            logger.info("JavaScript 로그인 함수 호출 시도")
+            # 일반적인 로그인 함수명들 시도
+            js_functions = [
+                "submitForm()",
+                "loginSubmit()",
+                "doLogin()",
+                "userLogin()",
+                "memberLogin()",
+                "login()"
+            ]
+            
+            for js_func in js_functions:
+                try:
+                    driver.execute_script(js_func)
+                    time.sleep(3)
+                    if check_login_success(driver):
+                        logger.info(f"JavaScript 함수 {js_func} 로그인 성공")
+                        return True
+                except:
+                    continue
+                    
+        except Exception as e:
+            logger.warning(f"JavaScript 로그인 함수 호출 실패: {e}")
+
+        # 방법 4: 로그인 버튼 찾기 (기존 방식)
+        try:
+            logger.info("로그인 버튼 찾기 시도")
+            login_selectors = [
+                (By.XPATH, "//button[contains(text(), '로그인')]"),
+                (By.XPATH, "//input[@value='로그인']"),
+                (By.XPATH, "//input[@type='submit']"),
+                (By.CSS_SELECTOR, "button[type='submit']"),
+                (By.CSS_SELECTOR, "input[type='submit']"),
+                (By.XPATH, "//button[contains(@onclick, 'login')]"),
+                (By.XPATH, "//input[contains(@onclick, 'login')]")
+            ]
+
+            for selector_type, selector_value in login_selectors:
+                login_button = safe_find_element(driver, selector_type, selector_value, timeout=5)
+                if login_button:
+                    logger.info(f"로그인 버튼 찾음: {selector_type}='{selector_value}'")
+                    login_button.click()
+                    time.sleep(5)
+                    
+                    if check_login_success(driver):
+                        logger.info("로그인 버튼 클릭 성공")
+                        return True
+                    break
+        except Exception as e:
+            logger.warning(f"로그인 버튼 방식 실패: {e}")
+
+        # 모든 방법 실패
+        logger.error("모든 로그인 방법이 실패했습니다.")
+        save_debug_info(driver, "all_login_methods_failed")
         return False
 
     except Exception as e:
@@ -351,126 +358,125 @@ def login_yesfile(driver, username, password):
         save_debug_info(driver, "login_error")
         return False
 
+def check_login_success(driver):
+    """로그인 성공 여부 확인"""
+    try:
+        current_url = driver.current_url.lower()
+        page_source = driver.page_source.lower()
+
+        # 로그인 성공 지표들
+        success_indicators = [
+            "마이페이지", "로그아웃", "내정보", "포인트", "구매자료",
+            "mypage", "logout", "point", "profile", "dashboard"
+        ]
+
+        # URL 변경 확인
+        if "login" not in current_url:
+            logger.info("로그인 페이지에서 벗어남 - 성공 가능성")
+            
+        # 페이지 내용 확인
+        for indicator in success_indicators:
+            if indicator.lower() in page_source:
+                logger.info(f"로그인 성공 지표 발견: '{indicator}'")
+                return True
+        
+        # 실패 지표 확인
+        error_indicators = [
+            "로그인 실패", "아이디를 확인", "비밀번호를 확인", "login failed"
+        ]
+        
+        for error in error_indicators:
+            if error.lower() in page_source:
+                logger.warning(f"로그인 실패 지표 발견: '{error}'")
+                return False
+
+        # 명확하지 않은 경우
+        if "login" not in current_url:
+            logger.info("URL 변경 기준으로 로그인 성공으로 판단")
+            return True
+            
+        return False
+        
+    except Exception as e:
+        logger.warning(f"로그인 성공 여부 확인 실패: {e}")
+        return False
+
 def check_attendance(driver):
-    """출석체크 수행 (강화된 버전)"""
+    """출석체크 수행"""
     try:
         logger.info("출석체크 시작")
 
-        # 이벤트 페이지 URL들 (실제 URL 확인 필요)
+        # 이벤트 페이지 URL들
         event_urls = [
             "https://www.yesfile.com/event/#tab=view&id=attendroulette",
             "https://www.yesfile.com/event/attendance",
             "https://www.yesfile.com/event",
-            "https://www.yesfile.com/attendance"
+            "https://www.yesfile.com/"
         ]
 
         for url in event_urls:
             try:
-                logger.info(f"이벤트 페이지 접속 시도: {url}")
+                logger.info(f"이벤트 페이지 접속: {url}")
                 driver.get(url)
+                
+                # JavaScript 로딩 완료 대기
+                WebDriverWait(driver, 15).until(
+                    lambda d: d.execute_script("return document.readyState") == "complete"
+                )
                 time.sleep(5)
                 
                 save_debug_info(driver, f"event_page_{event_urls.index(url)}")
 
-                # 출석체크 관련 요소 찾기
+                # 출석체크 버튼 찾기
                 attendance_selectors = [
-                    # 가장 구체적인 선택자부터
                     (By.CSS_SELECTOR, "button.attend_btn"),
                     (By.CSS_SELECTOR, "button[class*='attend']"),
-                    (By.CSS_SELECTOR, "a.attend_btn"),
-                    (By.CSS_SELECTOR, "a[class*='attend']"),
-                    (By.XPATH, "//button[@class='attend_btn']"),
-                    (By.XPATH, "//button[contains(@class, 'attend')]"),
-                    (By.XPATH, "//a[contains(@class, 'attend')]"),
-                    # 텍스트 기반 선택자
                     (By.XPATH, "//button[contains(text(), '출석체크')]"),
-                    (By.XPATH, "//a[contains(text(), '출석체크')]"),
                     (By.XPATH, "//button[contains(text(), '출석')]"),
+                    (By.XPATH, "//a[contains(text(), '출석체크')]"),
                     (By.XPATH, "//a[contains(text(), '출석')]"),
-                    (By.XPATH, "//input[contains(@value, '출석체크')]"),
-                    (By.XPATH, "//input[contains(@value, '출석')]"),
-                    # 일반적인 선택자
-                    (By.CSS_SELECTOR, "button[onclick*='attendance']"),
                     (By.CSS_SELECTOR, "a[href*='attendance']"),
-                    (By.CSS_SELECTOR, "button[onclick*='attend']"),
-                    (By.CSS_SELECTOR, "a[href*='attend']")
+                    (By.CSS_SELECTOR, "button[onclick*='attendance']")
                 ]
 
-                attendance_element = None
                 for selector_type, selector_value in attendance_selectors:
                     attendance_element = safe_find_element(driver, selector_type, selector_value, timeout=5)
                     if attendance_element:
                         logger.info(f"출석체크 버튼 찾음: {selector_type}='{selector_value}'")
-                        break
-
-                if attendance_element:
-                    try:
-                        # 버튼 클릭
                         attendance_element.click()
-                        logger.info("출석체크 버튼 클릭 완료")
                         time.sleep(5)
 
-                        save_debug_info(driver, "after_attendance_click")
-
                         # 출석체크 완료 확인
+                        page_source = driver.page_source.lower()
                         success_messages = [
                             "출석완료", "출석체크 완료", "이미 출석", "포인트가 적립",
-                            "출석 성공", "출석이 완료", "포인트 지급", "출석체크가 완료",
-                            "출석 처리", "출석했습니다", "attendance complete"
+                            "attendance complete", "출석 성공"
                         ]
 
-                        page_source = driver.page_source.lower()
                         for message in success_messages:
                             if message.lower() in page_source:
-                                logger.info(f"출석체크 완료 확인 - '{message}' 메시지 발견")
+                                logger.info(f"출석체크 완료: '{message}'")
                                 return True
 
-                        # Alert 창 확인
-                        try:
-                            WebDriverWait(driver, 3).until(EC.alert_is_present())
-                            alert = driver.switch_to.alert
-                            alert_text = alert.text
-                            logger.info(f"Alert 메시지: {alert_text}")
-                            alert.accept()
-                            
-                            # Alert 메시지로 성공 여부 판단
-                            for message in success_messages:
-                                if message.lower() in alert_text.lower():
-                                    logger.info("Alert에서 출석체크 완료 확인")
-                                    return True
-                                    
-                        except TimeoutException:
-                            logger.debug("Alert 창이 없습니다.")
-                        except Exception as e:
-                            logger.debug(f"Alert 처리 중 오류: {e}")
-
-                        logger.info("출석체크 버튼을 클릭했지만 완료 메시지를 명확히 확인할 수 없습니다.")
-                        return True  # 클릭은 성공했으므로 일단 성공으로 처리
-
-                    except Exception as e:
-                        logger.error(f"출석체크 버튼 클릭 실패: {e}")
-                        continue
-                else:
-                    logger.debug(f"URL {url}에서 출석체크 버튼을 찾을 수 없습니다.")
+                        logger.info("출석체크 버튼 클릭 완료 (결과 확인 중)")
+                        return True
 
             except Exception as e:
-                logger.debug(f"URL {url}에서 출석체크 시도 실패: {str(e)}")
+                logger.debug(f"URL {url}에서 출석체크 실패: {e}")
                 continue
 
-        logger.warning("모든 URL에서 출석체크 버튼을 찾을 수 없습니다.")
+        logger.warning("출석체크 버튼을 찾을 수 없습니다.")
         return False
 
     except Exception as e:
-        logger.error(f"출석체크 중 오류 발생: {str(e)}")
-        logger.error(f"상세 오류: {traceback.format_exc()}")
-        save_debug_info(driver, "attendance_error")
+        logger.error(f"출석체크 중 오류: {str(e)}")
         return False
 
 def main():
     """메인 함수"""
     driver = None
     try:
-        logger.info("=== 예스파일 자동 출석체크 시작 ===")
+        logger.info("=== 예스파일 자동 출석체크 시작 (JavaScript 활성화) ===")
         logger.info(f"실행 환경: {'GitHub Actions' if os.environ.get('GITHUB_ACTIONS') else '로컬'}")
 
         # 로그인 정보 가져오기
