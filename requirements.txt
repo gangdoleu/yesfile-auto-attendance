@@ -1,2 +1,11 @@
-selenium>=4.33.0
-webdriver-manager>=4.0.2
+# 예스파일 자동 출석체크 - 필수 패키지 목록
+# 2025년 6월 최신 버전 기준
+
+# 웹 자동화 핵심 라이브러리
+selenium>=4.23.0
+
+# Chrome 드라이버 자동 관리
+webdriver-manager>=4.0.1
+
+# 추가 유틸리티 (필요 시)
+requests>=2.31.0
