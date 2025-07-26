@@ -429,7 +429,7 @@ def check_attendance(driver):
 
                 # 출석체크 버튼 찾기
                 attendance_selectors = [
-                    (By.CSS_SELECTOR, "button.attend_btn"),
+                    (By.CSS_SELECTOR, "#attendroulette > button"),
                     (By.CSS_SELECTOR, "button[class*='attend']"),
                     (By.XPATH, "//button[contains(text(), '출석체크')]"),
                     (By.XPATH, "//button[contains(text(), '출석')]"),
